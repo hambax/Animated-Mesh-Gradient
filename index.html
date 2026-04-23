@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gradient Mesh Generator</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #ccc; display: flex; height: 100vh; overflow: hidden; }
+
+#sidebar {
+  width: 320px; min-width: 320px; background: #111; border-right: 1px solid #222;
+  overflow-y: auto; padding: 0; z-index: 10; display: flex; flex-direction: column;
+}
+#sidebar::-webkit-scrollbar { width: 6px; }
+#sidebar::-webkit-scrollbar-track { background: #111; }
+#sidebar::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+.sidebar-header {
+  padding: 16px 16px 12px; border-bottom: 1px solid #222; position: sticky; top: 0;
+  background: #111; z-index: 2;
+}
+.sidebar-header h1 { font-size: 14px; font-weight: 600; color: #fff; letter-spacing: 0.5px; text-transform: uppercase; }
+.sidebar-header p { font-size: 11px; color: #666; margin-top: 4px; }
+
+.sidebar-scroll { flex: 1; overflow-y: auto; padding-bottom: 20px; }
+
+.btn-row { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.btn {
+  padding: 6px 12px; border: 1px solid #333; background: #1a1a1a; color: #ccc;
+  font-size: 11px; border-radius: 4px; cursor: pointer; transition: all 0.15s;
+  font-family: inherit;
+}
+.btn:hover { background: #252525; border-color: #444; color: #fff; }
+.btn-primary { background: #2563eb; border-color: #3b82f6; color: #fff; }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-danger { border-color: #7f1d1d; color: #f87171; }
+.btn-danger:hover { background: #1c0a0a; }
+
+.section {
+  border-bottom: 1px solid #1a1a1a;
+}
+.section-header {
+  padding: 10px 16px; cursor: pointer; display: flex; align-items: center;
+  justify-content: space-between; user-select: none; font-size: 11px;
+  font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #888;
+}
+.section-header:hover { color: #bbb; }
+.section-header .arrow { transition: transform 0.2s; font-size: 10px; }
+.section-header.collapsed .arrow { transform: rotate(-90deg); }
+.section-body { padding: 4px 16px 12px; }
+.section-body.hidden { display: none; }
+
+.control { margin-bottom: 8px; }
+.control-label {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 3px; font-size: 11px; color: #888;
+}
+.control-label span:last-child { color: #4a9eff; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 10px; }
+
+input[type="range"] {
+  -webkit-appearance: none; width: 100%; height: 4px; border-radius: 2px;
+  background: #2a2a2a; outline: none; cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+  background: #4a9eff; cursor: pointer; border: 2px solid #111;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #4a9eff; cursor: pointer; border: 2px solid #111;
+}
+
+.color-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.color-row input[type="color"] {
+  -webkit-appearance: none; width: 32px; height: 24px; border: 1px solid #333;
+  border-radius: 4px; cursor: pointer; background: none; padding: 0;
+}
+.color-row input[type="color"]::-webkit-color-swatch-wrapper { padding: 1px; }
+.color-row input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
+.color-row label { font-size: 11px; color: #888; flex: 1; }
+.color-row .remove-color { background: none; border: none; color: #555; cursor: pointer; font-size: 16px; padding: 0 4px; }
+.color-row .remove-color:hover { color: #f87171; }
+
+.preset-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 6px; }
+.preset-btn {
+  height: 40px; border-radius: 6px; border: 2px solid transparent; cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
+}
+.preset-btn:hover { border-color: #4a9eff; transform: scale(1.05); }
+
+.toggle-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.toggle-row label { font-size: 11px; color: #888; }
+.toggle {
+  width: 36px; height: 20px; border-radius: 10px; background: #333; cursor: pointer;
+  position: relative; transition: background 0.2s; border: none;
+}
+.toggle.active { background: #2563eb; }
+.toggle::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+  border-radius: 50%; background: #fff; transition: transform 0.2s;
+}
+.toggle.active::after { transform: translateX(16px); }
+
+#canvas-wrap {
+  flex: 1; position: relative; overflow: hidden; background: #000;
+}
+canvas { width: 100%; height: 100%; display: block; }
+
+.export-modal {
+  display: none; position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.7);
+  align-items: center; justify-content: center;
+}
+.export-modal.open { display: flex; }
+.export-content {
+  background: #1a1a1a; border: 1px solid #333; border-radius: 8px;
+  width: 700px; max-width: 90vw; max-height: 80vh; display: flex; flex-direction: column;
+}
+.export-header {
+  padding: 16px 20px; border-bottom: 1px solid #222; display: flex;
+  justify-content: space-between; align-items: center;
+}
+.export-header h2 { font-size: 14px; color: #fff; }
+.export-close { background: none; border: none; color: #888; font-size: 20px; cursor: pointer; }
+.export-close:hover { color: #fff; }
+.export-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+.export-body textarea {
+  width: 100%; height: 400px; background: #111; border: 1px solid #333; color: #9cdcfe;
+  font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; padding: 12px;
+  border-radius: 4px; resize: vertical; outline: none;
+}
+.export-body textarea:focus { border-color: #4a9eff; }
+.export-footer { padding: 12px 20px; border-top: 1px solid #222; display: flex; justify-content: flex-end; gap: 8px; }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div class="sidebar-header">
+    <h1>Gradient Mesh Studio</h1>
+    <p>Stripe-style animated gradient tool</p>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="openExport()">Export Code</button>
+      <button class="btn" onclick="randomize()">Randomize</button>
+      <button class="btn btn-danger" onclick="resetAll()">Reset</button>
+    </div>
+  </div>
+  <div class="sidebar-scroll">
+
+    <!-- Presets -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)"><span>Presets</span><span class="arrow">&#9660;</span></div>
+      <div class="section-body">
+        <div class="preset-grid" id="presetGrid"></div>
+      </div>
+    </div>
+
+    <!-- Colors -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)"><span>Colors</span><span class="arrow">&#9660;</span></div>
+      <div class="section-body">
+        <div id="colorControls"></div>
+        <button class="btn" onclick="addColor()" style="margin-top:6px; width:100%;">+ Add Color</button>
+      </div>
+    </div>
+
+    <!-- Animation -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)"><span>Animation</span><span class="arrow">&#9660;</span></div>
+      <div class="section-body">
+        <div class="toggle-row">
+          <label>Animate</label>
+          <button class="toggle active" id="animToggle" onclick="toggleAnim(this)"></button>
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Speed</span><span id="v_speed">0.40</span></div>
+          <input type="range" min="0" max="2" step="0.01" value="0.4" oninput="setParam('speed',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Time Offset</span><span id="v_timeOffset">0.00</span></div>
+          <input type="range" min="0" max="100" step="0.1" value="0" oninput="setParam('timeOffset',this.value)">
+        </div>
+      </div>
+    </div>
+
+    <!-- Noise / Shape -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)"><span>Noise / Shape</span><span class="arrow">&#9660;</span></div>
+      <div class="section-body">
+        <div class="control">
+          <div class="control-label"><span>Seed</span><span id="v_seed">0.00</span></div>
+          <input type="range" min="0" max="100" step="0.1" value="0" oninput="setParam('seed',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Noise Scale</span><span id="v_noiseScale">1.00</span></div>
+          <input type="range" min="0.1" max="5" step="0.01" value="1" oninput="setParam('noiseScale',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Noise Intensity</span><span id="v_noiseIntensity">0.60</span></div>
+          <input type="range" min="0" max="2" step="0.01" value="0.6" oninput="setParam('noiseIntensity',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Undulation X</span><span id="v_undulationX">1.00</span></div>
+          <input type="range" min="0" max="5" step="0.01" value="1" oninput="setParam('undulationX',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Undulation Y</span><span id="v_undulationY">1.00</span></div>
+          <input type="range" min="0" max="5" step="0.01" value="1" oninput="setParam('undulationY',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Complexity</span><span id="v_complexity">3</span></div>
+          <input type="range" min="1" max="8" step="1" value="3" oninput="setParam('complexity',this.value)">
+        </div>
+      </div>
+    </div>
+
+    <!-- Distortion -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)"><span>Distortion / Twist</span><span class="arrow">&#9660;</span></div>
+      <div class="section-body">
+        <div class="control">
+          <div class="control-label"><span>Twist Amount</span><span id="v_twist">0.30</span></div>
+          <input type="range" min="0" max="3" step="0.01" value="0.3" oninput="setParam('twist',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Twist Frequency</span><span id="v_twistFreq">1.00</span></div>
+          <input type="range" min="0.1" max="5" step="0.01" value="1" oninput="setParam('twistFreq',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Warp X</span><span id="v_warpX">0.20</span></div>
+          <input type="range" min="0" max="2" step="0.01" value="0.2" oninput="setParam('warpX',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Warp Y</span><span id="v_warpY">0.20</span></div>
+          <input type="range" min="0" max="2" step="0.01" value="0.2" oninput="setParam('warpY',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Displacement</span><span id="v_displacement">0.15</span></div>
+          <input type="range" min="0" max="1" step="0.01" value="0.15" oninput="setParam('displacement',this.value)">
+        </div>
+      </div>
+    </div>
+
+    <!-- Geometry -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)"><span>Position / Scale</span><span class="arrow">&#9660;</span></div>
+      <div class="section-body">
+        <div class="control">
+          <div class="control-label"><span>Zoom</span><span id="v_zoom">1.00</span></div>
+          <input type="range" min="0.2" max="4" step="0.01" value="1" oninput="setParam('zoom',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Pan X</span><span id="v_panX">0.00</span></div>
+          <input type="range" min="-2" max="2" step="0.01" value="0" oninput="setParam('panX',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Pan Y</span><span id="v_panY">0.00</span></div>
+          <input type="range" min="-2" max="2" step="0.01" value="0" oninput="setParam('panY',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Rotation</span><span id="v_rotation">0.00</span></div>
+          <input type="range" min="-3.14159" max="3.14159" step="0.01" value="0" oninput="setParam('rotation',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Stretch X</span><span id="v_stretchX">1.00</span></div>
+          <input type="range" min="0.2" max="3" step="0.01" value="1" oninput="setParam('stretchX',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Stretch Y</span><span id="v_stretchY">1.00</span></div>
+          <input type="range" min="0.2" max="3" step="0.01" value="1" oninput="setParam('stretchY',this.value)">
+        </div>
+      </div>
+    </div>
+
+    <!-- Appearance -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)"><span>Appearance</span><span class="arrow">&#9660;</span></div>
+      <div class="section-body">
+        <div class="control">
+          <div class="control-label"><span>Brightness</span><span id="v_brightness">1.00</span></div>
+          <input type="range" min="0.2" max="2" step="0.01" value="1" oninput="setParam('brightness',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Contrast</span><span id="v_contrast">1.00</span></div>
+          <input type="range" min="0.5" max="2" step="0.01" value="1" oninput="setParam('contrast',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Saturation</span><span id="v_saturation">1.00</span></div>
+          <input type="range" min="0" max="2" step="0.01" value="1" oninput="setParam('saturation',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Grain</span><span id="v_grain">0.05</span></div>
+          <input type="range" min="0" max="0.3" step="0.001" value="0.05" oninput="setParam('grain',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Vignette</span><span id="v_vignette">0.00</span></div>
+          <input type="range" min="0" max="1" step="0.01" value="0" oninput="setParam('vignette',this.value)">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Glow</span><span id="v_glow">0.00</span></div>
+          <input type="range" min="0" max="1" step="0.01" value="0" oninput="setParam('glow',this.value)">
+        </div>
+      </div>
+    </div>
+
+    <!-- Background -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)"><span>Background</span><span class="arrow">&#9660;</span></div>
+      <div class="section-body">
+        <div class="color-row">
+          <input type="color" id="bgColor" value="#0a0a2e" oninput="setParam('bgColor',this.value)">
+          <label>Background Color</label>
+        </div>
+        <div class="control">
+          <div class="control-label"><span>BG Blend</span><span id="v_bgBlend">0.20</span></div>
+          <input type="range" min="0" max="1" step="0.01" value="0.2" oninput="setParam('bgBlend',this.value)">
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="canvas-wrap">
+  <canvas id="glcanvas"></canvas>
+</div>
+
+<div class="export-modal" id="exportModal">
+  <div class="export-content">
+    <div class="export-header">
+      <h2>Export Standalone HTML</h2>
+      <button class="export-close" onclick="closeExport()">&times;</button>
+    </div>
+    <div class="export-body">
+      <textarea id="exportCode" readonly></textarea>
+    </div>
+    <div class="export-footer">
+      <button class="btn" onclick="closeExport()">Close</button>
+      <button class="btn btn-primary" onclick="copyExport()">Copy to Clipboard</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const params = {
+  speed: 0.4, timeOffset: 0, seed: 0, noiseScale: 1, noiseIntensity: 0.6,
+  undulationX: 1, undulationY: 1, complexity: 3, twist: 0.3, twistFreq: 1,
+  warpX: 0.2, warpY: 0.2, displacement: 0.15, zoom: 1, panX: 0, panY: 0,
+  rotation: 0, stretchX: 1, stretchY: 1, brightness: 1, contrast: 1,
+  saturation: 1, grain: 0.05, vignette: 0, glow: 0, bgColor: '#0a0a2e', bgBlend: 0.2
+};
+
+let colors = [
+  '#ff6b35', '#f7c948', '#e0479e', '#8b5cf6', '#06b6d4'
+];
+
+let animating = true;
+
+const presets = [
+  { name:'Stripe', colors:['#ff6b35','#f7c948','#e0479e','#8b5cf6','#06b6d4'], bg:'#0a0a2e', p:{speed:0.4,noiseScale:1,noiseIntensity:0.6,twist:0.3,twistFreq:1,warpX:0.2,warpY:0.2,complexity:3,seed:0,zoom:1}},
+  { name:'Ocean', colors:['#0077b6','#00b4d8','#90e0ef','#023e8a','#48cae4'], bg:'#001233', p:{speed:0.25,noiseScale:1.5,noiseIntensity:0.5,twist:0.15,twistFreq:0.8,warpX:0.3,warpY:0.1,complexity:4,seed:12,zoom:1}},
+  { name:'Sunset', colors:['#ff4500','#ff6347','#ff8c00','#ffd700','#ff1493'], bg:'#1a0a00', p:{speed:0.3,noiseScale:0.8,noiseIntensity:0.7,twist:0.5,twistFreq:1.2,warpX:0.15,warpY:0.25,complexity:3,seed:25,zoom:1}},
+  { name:'Aurora', colors:['#00ff87','#60efff','#0061ff','#ff00e5','#00c9a7'], bg:'#020a13', p:{speed:0.2,noiseScale:1.3,noiseIntensity:0.8,twist:0.4,twistFreq:0.6,warpX:0.35,warpY:0.35,complexity:5,seed:42,zoom:1}},
+  { name:'Ember', colors:['#ff0000','#ff4400','#ff8800','#440000','#ffcc00'], bg:'#0a0000', p:{speed:0.5,noiseScale:0.7,noiseIntensity:0.9,twist:0.6,twistFreq:1.5,warpX:0.1,warpY:0.4,complexity:3,seed:7,zoom:1}},
+  { name:'Neon', colors:['#00ffff','#ff00ff','#ffff00','#00ff00','#ff0088'], bg:'#000000', p:{speed:0.35,noiseScale:1.2,noiseIntensity:0.5,twist:0.2,twistFreq:2,warpX:0.25,warpY:0.25,complexity:4,seed:55,zoom:1}},
+  { name:'Pastel', colors:['#ffc8dd','#bde0fe','#a2d2ff','#cdb4db','#caffbf'], bg:'#1a1a2e', p:{speed:0.15,noiseScale:0.9,noiseIntensity:0.4,twist:0.1,twistFreq:0.5,warpX:0.15,warpY:0.15,complexity:2,seed:33,zoom:1}},
+  { name:'Void', colors:['#2d00f7','#6a00f4','#8900f2','#a100f2','#b100e8'], bg:'#030012', p:{speed:0.3,noiseScale:1.8,noiseIntensity:0.7,twist:0.7,twistFreq:1.3,warpX:0.4,warpY:0.2,complexity:5,seed:17,zoom:1}},
+  { name:'Earth', colors:['#606c38','#283618','#dda15e','#bc6c25','#fefae0'], bg:'#0d1002', p:{speed:0.2,noiseScale:1.1,noiseIntensity:0.5,twist:0.25,twistFreq:0.9,warpX:0.2,warpY:0.3,complexity:3,seed:61,zoom:1}},
+];
+
+function hexToRGB(hex) {
+  const r = parseInt(hex.slice(1,3),16)/255;
+  const g = parseInt(hex.slice(3,5),16)/255;
+  const b = parseInt(hex.slice(5,7),16)/255;
+  return [r,g,b];
+}
+
+// WebGL setup
+const canvas = document.getElementById('glcanvas');
+const gl = canvas.getContext('webgl', { antialias: true, preserveDrawingBuffer: true });
+
+function resize() {
+  const w = canvas.parentElement.clientWidth;
+  const h = canvas.parentElement.clientHeight;
+  const dpr = Math.min(window.devicePixelRatio, 2);
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+window.addEventListener('resize', resize);
+resize();
+
+const vsSource = `
+attribute vec2 aPos;
+varying vec2 vUv;
+void main(){
+  vUv = aPos * 0.5 + 0.5;
+  gl_Position = vec4(aPos, 0.0, 1.0);
+}`;
+
+const fsSource = `
+precision highp float;
+varying vec2 vUv;
+
+uniform float uTime;
+uniform float uSeed;
+uniform float uNoiseScale;
+uniform float uNoiseIntensity;
+uniform float uUndulationX;
+uniform float uUndulationY;
+uniform float uComplexity;
+uniform float uTwist;
+uniform float uTwistFreq;
+uniform float uWarpX;
+uniform float uWarpY;
+uniform float uDisplacement;
+uniform float uZoom;
+uniform float uPanX;
+uniform float uPanY;
+uniform float uRotation;
+uniform float uStretchX;
+uniform float uStretchY;
+uniform float uBrightness;
+uniform float uContrast;
+uniform float uSaturation;
+uniform float uGrain;
+uniform float uVignette;
+uniform float uGlow;
+uniform vec3 uBgColor;
+uniform float uBgBlend;
+uniform float uAspect;
+uniform vec3 uColors[8];
+uniform int uColorCount;
+
+// Simplex-like noise
+vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
+vec4 mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}
+vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}
+vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}
+
+float snoise(vec3 v){
+  const vec2 C=vec2(1.0/6.0,1.0/3.0);
+  const vec4 D=vec4(0.0,0.5,1.0,2.0);
+  vec3 i=floor(v+dot(v,C.yyy));
+  vec3 x0=v-i+dot(i,C.xxx);
+  vec3 g=step(x0.yzx,x0.xyz);
+  vec3 l=1.0-g;
+  vec3 i1=min(g.xyz,l.zxy);
+  vec3 i2=max(g.xyz,l.zxy);
+  vec3 x1=x0-i1+C.xxx;
+  vec3 x2=x0-i2+C.yyy;
+  vec3 x3=x0-D.yyy;
+  i=mod289(i);
+  vec4 p=permute(permute(permute(
+    i.z+vec4(0.0,i1.z,i2.z,1.0))
+    +i.y+vec4(0.0,i1.y,i2.y,1.0))
+    +i.x+vec4(0.0,i1.x,i2.x,1.0));
+  float n_=0.142857142857;
+  vec3 ns=n_*D.wyz-D.xzx;
+  vec4 j=p-49.0*floor(p*ns.z*ns.z);
+  vec4 x_=floor(j*ns.z);
+  vec4 y_=floor(j-7.0*x_);
+  vec4 x=x_*ns.x+ns.yyyy;
+  vec4 y=y_*ns.x+ns.yyyy;
+  vec4 h=1.0-abs(x)-abs(y);
+  vec4 b0=vec4(x.xy,y.xy);
+  vec4 b1=vec4(x.zw,y.zw);
+  vec4 s0=floor(b0)*2.0+1.0;
+  vec4 s1=floor(b1)*2.0+1.0;
+  vec4 sh=-step(h,vec4(0.0));
+  vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy;
+  vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
+  vec3 p0=vec3(a0.xy,h.x);
+  vec3 p1=vec3(a0.zw,h.y);
+  vec3 p2=vec3(a1.xy,h.z);
+  vec3 p3=vec3(a1.zw,h.w);
+  vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+  p0*=norm.x;p1*=norm.y;p2*=norm.z;p3*=norm.w;
+  vec4 m=max(0.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.0);
+  m=m*m;
+  return 42.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
+}
+
+float fbm(vec3 p, float octaves){
+  float val=0.0; float amp=0.5; float freq=1.0;
+  for(float i=0.0;i<8.0;i++){
+    if(i>=octaves) break;
+    val+=amp*snoise(p*freq);
+    freq*=2.0; amp*=0.5;
+  }
+  return val;
+}
+
+float hash(vec2 p){
+  return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);
+}
+
+void main(){
+  vec2 uv = vUv;
+  
+  // Apply aspect, pan, zoom, rotation, stretch
+  vec2 centered = (uv - 0.5) * 2.0;
+  centered.x *= uAspect;
+  centered /= uZoom;
+  centered.x /= uStretchX;
+  centered.y /= uStretchY;
+  
+  // Rotation
+  float cs = cos(uRotation);
+  float sn = sin(uRotation);
+  centered = vec2(centered.x*cs - centered.y*sn, centered.x*sn + centered.y*cs);
+  
+  centered.x -= uPanX;
+  centered.y -= uPanY;
+  
+  vec2 p = centered;
+  
+  // Time
+  float t = uTime;
+  
+  // Domain warping
+  float warpN1 = snoise(vec3(p * uNoiseScale * 0.7 + uSeed, t * 0.3));
+  float warpN2 = snoise(vec3(p * uNoiseScale * 0.7 + uSeed + 100.0, t * 0.3 + 50.0));
+  p.x += warpN1 * uWarpX;
+  p.y += warpN2 * uWarpY;
+  
+  // Twist distortion
+  float twistAngle = uTwist * sin(p.y * uTwistFreq + t * 0.5);
+  float tc = cos(twistAngle);
+  float ts = sin(twistAngle);
+  p = vec2(p.x*tc - p.y*ts, p.x*ts + p.y*tc);
+  
+  // Displacement
+  float dispN = snoise(vec3(p * 2.0 + uSeed + 200.0, t * 0.4));
+  p += dispN * uDisplacement;
+  
+  // FBM noise for color mixing
+  float n1 = fbm(vec3(p * uNoiseScale * uUndulationX, t * 0.4 + uSeed), uComplexity);
+  float n2 = fbm(vec3(p * uNoiseScale * uUndulationY + 50.0, t * 0.35 + uSeed + 10.0), uComplexity);
+  float n3 = fbm(vec3(p * uNoiseScale * 0.8 + 100.0, t * 0.3 + uSeed + 20.0), uComplexity);
+  
+  n1 = n1 * uNoiseIntensity;
+  n2 = n2 * uNoiseIntensity;
+  n3 = n3 * uNoiseIntensity;
+  
+  // Map noise to color indices
+  vec3 col = uColors[0];
+  
+  if(uColorCount >= 2){
+    float idx = (n1 + n2 * 0.5 + 0.75) * float(uColorCount - 1);
+    idx = clamp(idx, 0.0, float(uColorCount - 1));
+    int i0 = int(floor(idx));
+    int i1 = i0 + 1;
+    float frac = fract(idx);
+    frac = frac * frac * (3.0 - 2.0 * frac); // smoothstep
+    
+    vec3 c0 = uColors[0]; vec3 c1 = uColors[0];
+    for(int k=0; k<8; k++){ if(k==i0) c0=uColors[k]; if(k==i1) c1=uColors[k]; }
+    col = mix(c0, c1, frac);
+  }
+  
+  // Secondary noise for luminance variation
+  float lum = 0.5 + n3 * 0.5;
+  col *= (0.7 + lum * 0.6);
+  
+  // Glow
+  float glowN = smoothstep(-0.2, 0.8, n1 + n2);
+  col += col * glowN * uGlow;
+  
+  // Background blend
+  vec3 bg = uBgColor;
+  float edgeDist = length(centered) * 0.5;
+  float bgMask = smoothstep(0.3, 1.5, edgeDist) * uBgBlend;
+  col = mix(col, bg, bgMask);
+  
+  // Brightness / contrast / saturation
+  col *= uBrightness;
+  col = (col - 0.5) * uContrast + 0.5;
+  float gray = dot(col, vec3(0.299, 0.587, 0.114));
+  col = mix(vec3(gray), col, uSaturation);
+  
+  // Vignette
+  float vig = 1.0 - smoothstep(0.4, 1.4, length((vUv - 0.5) * 2.0));
+  col = mix(col, col * vig, uVignette);
+  
+  // Grain
+  float gr = (hash(vUv * 1000.0 + fract(uTime * 100.0)) - 0.5) * uGrain;
+  col += gr;
+  
+  col = clamp(col, 0.0, 1.0);
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+function createShader(type, source) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, source);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    console.error(gl.getShaderInfoLog(s));
+    gl.deleteShader(s);
+    return null;
+  }
+  return s;
+}
+
+const vs = createShader(gl.VERTEX_SHADER, vsSource);
+const fs = createShader(gl.FRAGMENT_SHADER, fsSource);
+const program = gl.createProgram();
+gl.attachShader(program, vs);
+gl.attachShader(program, fs);
+gl.linkProgram(program);
+if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+  console.error(gl.getProgramInfoLog(program));
+}
+gl.useProgram(program);
+
+const quad = new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(program, 'aPos');
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+const uniforms = {};
+const uNames = [
+  'uTime','uSeed','uNoiseScale','uNoiseIntensity','uUndulationX','uUndulationY',
+  'uComplexity','uTwist','uTwistFreq','uWarpX','uWarpY','uDisplacement',
+  'uZoom','uPanX','uPanY','uRotation','uStretchX','uStretchY',
+  'uBrightness','uContrast','uSaturation','uGrain','uVignette','uGlow',
+  'uBgColor','uBgBlend','uAspect','uColorCount'
+];
+for (const n of uNames) uniforms[n] = gl.getUniformLocation(program, n);
+for (let i = 0; i < 8; i++) uniforms['uColors'+i] = gl.getUniformLocation(program, 'uColors['+i+']');
+
+let startTime = performance.now() / 1000;
+
+function render(now) {
+  requestAnimationFrame(render);
+  
+  const t = animating ? (now / 1000 - startTime) * params.speed + parseFloat(params.timeOffset) : parseFloat(params.timeOffset);
+  const aspect = canvas.width / canvas.height;
+  
+  gl.uniform1f(uniforms.uTime, t);
+  gl.uniform1f(uniforms.uSeed, parseFloat(params.seed));
+  gl.uniform1f(uniforms.uNoiseScale, parseFloat(params.noiseScale));
+  gl.uniform1f(uniforms.uNoiseIntensity, parseFloat(params.noiseIntensity));
+  gl.uniform1f(uniforms.uUndulationX, parseFloat(params.undulationX));
+  gl.uniform1f(uniforms.uUndulationY, parseFloat(params.undulationY));
+  gl.uniform1f(uniforms.uComplexity, parseFloat(params.complexity));
+  gl.uniform1f(uniforms.uTwist, parseFloat(params.twist));
+  gl.uniform1f(uniforms.uTwistFreq, parseFloat(params.twistFreq));
+  gl.uniform1f(uniforms.uWarpX, parseFloat(params.warpX));
+  gl.uniform1f(uniforms.uWarpY, parseFloat(params.warpY));
+  gl.uniform1f(uniforms.uDisplacement, parseFloat(params.displacement));
+  gl.uniform1f(uniforms.uZoom, parseFloat(params.zoom));
+  gl.uniform1f(uniforms.uPanX, parseFloat(params.panX));
+  gl.uniform1f(uniforms.uPanY, parseFloat(params.panY));
+  gl.uniform1f(uniforms.uRotation, parseFloat(params.rotation));
+  gl.uniform1f(uniforms.uStretchX, parseFloat(params.stretchX));
+  gl.uniform1f(uniforms.uStretchY, parseFloat(params.stretchY));
+  gl.uniform1f(uniforms.uBrightness, parseFloat(params.brightness));
+  gl.uniform1f(uniforms.uContrast, parseFloat(params.contrast));
+  gl.uniform1f(uniforms.uSaturation, parseFloat(params.saturation));
+  gl.uniform1f(uniforms.uGrain, parseFloat(params.grain));
+  gl.uniform1f(uniforms.uVignette, parseFloat(params.vignette));
+  gl.uniform1f(uniforms.uGlow, parseFloat(params.glow));
+  gl.uniform1f(uniforms.uBgBlend, parseFloat(params.bgBlend));
+  gl.uniform1f(uniforms.uAspect, aspect);
+  gl.uniform1i(uniforms.uColorCount, colors.length);
+  
+  const bg = hexToRGB(params.bgColor);
+  gl.uniform3f(uniforms.uBgColor, bg[0], bg[1], bg[2]);
+  
+  for (let i = 0; i < 8; i++) {
+    if (i < colors.length) {
+      const c = hexToRGB(colors[i]);
+      gl.uniform3f(uniforms['uColors'+i], c[0], c[1], c[2]);
+    } else {
+      gl.uniform3f(uniforms['uColors'+i], 0, 0, 0);
+    }
+  }
+  
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+requestAnimationFrame(render);
+
+// UI functions
+function setParam(name, value) {
+  params[name] = value;
+  const el = document.getElementById('v_'+name);
+  if (el) el.textContent = parseFloat(value).toFixed(2);
+}
+
+function toggleSection(header) {
+  header.classList.toggle('collapsed');
+  const body = header.nextElementSibling;
+  body.classList.toggle('hidden');
+}
+
+function toggleAnim(btn) {
+  animating = !animating;
+  btn.classList.toggle('active');
+  if (animating) startTime = performance.now() / 1000;
+}
+
+function renderColors() {
+  const wrap = document.getElementById('colorControls');
+  wrap.innerHTML = '';
+  colors.forEach((c, i) => {
+    const row = document.createElement('div');
+    row.className = 'color-row';
+    row.innerHTML = `
+      <input type="color" value="${c}" oninput="colors[${i}]=this.value">
+      <label>Color ${i+1}</label>
+      ${colors.length > 2 ? `<button class="remove-color" onclick="removeColor(${i})">&times;</button>` : ''}
+    `;
+    wrap.appendChild(row);
+  });
+}
+
+function addColor() {
+  if (colors.length >= 8) return;
+  const hue = Math.floor(Math.random() * 360);
+  const hex = hslToHex(hue, 80, 55);
+  colors.push(hex);
+  renderColors();
+}
+
+function removeColor(i) {
+  if (colors.length <= 2) return;
+  colors.splice(i, 1);
+  renderColors();
+}
+
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => { const k = (n + h / 30) % 12; return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1); };
+  return '#' + [f(0), f(8), f(4)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+}
+
+function renderPresets() {
+  const grid = document.getElementById('presetGrid');
+  grid.innerHTML = '';
+  presets.forEach((pr, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'preset-btn';
+    const grad = pr.colors.map((c, j) => `${c} ${(j/(pr.colors.length-1)*100).toFixed(0)}%`).join(',');
+    btn.style.background = `linear-gradient(135deg, ${grad})`;
+    btn.title = pr.name;
+    btn.onclick = () => applyPreset(i);
+    grid.appendChild(btn);
+  });
+}
+
+function applyPreset(i) {
+  const pr = presets[i];
+  colors = [...pr.colors];
+  params.bgColor = pr.bg;
+  document.getElementById('bgColor').value = pr.bg;
+  for (const [k, v] of Object.entries(pr.p)) {
+    params[k] = v;
+  }
+  syncSliders();
+  renderColors();
+}
+
+function syncSliders() {
+  const sidebar = document.getElementById('sidebar');
+  const sliders = sidebar.querySelectorAll('input[type="range"]');
+  sliders.forEach(s => {
+    const handler = s.getAttribute('oninput');
+    if (!handler) return;
+    const match = handler.match(/setParam\('(\w+)'/);
+    if (match && params[match[1]] !== undefined) {
+      s.value = params[match[1]];
+      const el = document.getElementById('v_' + match[1]);
+      if (el) el.textContent = parseFloat(params[match[1]]).toFixed(2);
+    }
+  });
+}
+
+function randomize() {
+  params.seed = (Math.random() * 100).toFixed(1);
+  params.noiseScale = (0.3 + Math.random() * 3).toFixed(2);
+  params.noiseIntensity = (0.2 + Math.random() * 1.2).toFixed(2);
+  params.twist = (Math.random() * 2).toFixed(2);
+  params.twistFreq = (0.2 + Math.random() * 3).toFixed(2);
+  params.warpX = (Math.random() * 1.5).toFixed(2);
+  params.warpY = (Math.random() * 1.5).toFixed(2);
+  params.displacement = (Math.random() * 0.6).toFixed(2);
+  params.undulationX = (0.3 + Math.random() * 3).toFixed(2);
+  params.undulationY = (0.3 + Math.random() * 3).toFixed(2);
+  params.complexity = Math.floor(2 + Math.random() * 5);
+
+  colors = [];
+  const count = 3 + Math.floor(Math.random() * 4);
+  const baseHue = Math.random() * 360;
+  for (let i = 0; i < count; i++) {
+    const hue = (baseHue + i * (360 / count) + (Math.random() - 0.5) * 60) % 360;
+    colors.push(hslToHex(hue, 60 + Math.random() * 40, 40 + Math.random() * 30));
+  }
+
+  const bgHue = (baseHue + 180) % 360;
+  params.bgColor = hslToHex(bgHue, 50, 8);
+  document.getElementById('bgColor').value = params.bgColor;
+
+  syncSliders();
+  renderColors();
+}
+
+function resetAll() {
+  Object.assign(params, {
+    speed:0.4, timeOffset:0, seed:0, noiseScale:1, noiseIntensity:0.6,
+    undulationX:1, undulationY:1, complexity:3, twist:0.3, twistFreq:1,
+    warpX:0.2, warpY:0.2, displacement:0.15, zoom:1, panX:0, panY:0,
+    rotation:0, stretchX:1, stretchY:1, brightness:1, contrast:1,
+    saturation:1, grain:0.05, vignette:0, glow:0, bgColor:'#0a0a2e', bgBlend:0.2
+  });
+  colors = ['#ff6b35','#f7c948','#e0479e','#8b5cf6','#06b6d4'];
+  document.getElementById('bgColor').value = '#0a0a2e';
+  syncSliders();
+  renderColors();
+}
+
+// Export
+function openExport() {
+  const code = generateExportCode();
+  document.getElementById('exportCode').value = code;
+  document.getElementById('exportModal').classList.add('open');
+}
+function closeExport() { document.getElementById('exportModal').classList.remove('open'); }
+function copyExport() {
+  const ta = document.getElementById('exportCode');
+  ta.select();
+  document.execCommand('copy');
+  const btn = document.querySelector('.export-footer .btn-primary');
+  btn.textContent = 'Copied!';
+  setTimeout(() => btn.textContent = 'Copy to Clipboard', 1500);
+}
+
+function generateExportCode() {
+  const colorsArr = JSON.stringify(colors);
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gradient Mesh Background</title>
+<style>
+* { margin: 0; padding: 0; }
+body { overflow: hidden; background: #000; }
+canvas { width: 100vw; height: 100vh; display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl');
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio, 2);
+  canvas.width = window.innerWidth * dpr;
+  canvas.height = window.innerHeight * dpr;
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+window.addEventListener('resize', resize);
+resize();
+
+const vs = \`attribute vec2 aPos; varying vec2 vUv; void main(){ vUv=aPos*0.5+0.5; gl_Position=vec4(aPos,0,1); }\`;
+const fs = \`${fsSource}\`;
+
+function cs(t, s) { const sh=gl.createShader(t); gl.shaderSource(sh,s); gl.compileShader(sh); return sh; }
+const pg = gl.createProgram();
+gl.attachShader(pg, cs(gl.VERTEX_SHADER, vs));
+gl.attachShader(pg, cs(gl.FRAGMENT_SHADER, fs));
+gl.linkProgram(pg);
+gl.useProgram(pg);
+
+const b = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, b);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
+const a = gl.getAttribLocation(pg, 'aPos');
+gl.enableVertexAttribArray(a);
+gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
+
+const u = n => gl.getUniformLocation(pg, n);
+const colors = ${colorsArr};
+function hexRGB(h) { return [parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16)/255,parseInt(h.slice(5,7),16)/255]; }
+const bg = hexRGB('${params.bgColor}');
+const st = performance.now()/1000;
+
+function draw(now) {
+  requestAnimationFrame(draw);
+  const t = (now/1000 - st) * ${params.speed} + ${params.timeOffset};
+  gl.uniform1f(u('uTime'), t);
+  gl.uniform1f(u('uSeed'), ${params.seed});
+  gl.uniform1f(u('uNoiseScale'), ${params.noiseScale});
+  gl.uniform1f(u('uNoiseIntensity'), ${params.noiseIntensity});
+  gl.uniform1f(u('uUndulationX'), ${params.undulationX});
+  gl.uniform1f(u('uUndulationY'), ${params.undulationY});
+  gl.uniform1f(u('uComplexity'), ${params.complexity});
+  gl.uniform1f(u('uTwist'), ${params.twist});
+  gl.uniform1f(u('uTwistFreq'), ${params.twistFreq});
+  gl.uniform1f(u('uWarpX'), ${params.warpX});
+  gl.uniform1f(u('uWarpY'), ${params.warpY});
+  gl.uniform1f(u('uDisplacement'), ${params.displacement});
+  gl.uniform1f(u('uZoom'), ${params.zoom});
+  gl.uniform1f(u('uPanX'), ${params.panX});
+  gl.uniform1f(u('uPanY'), ${params.panY});
+  gl.uniform1f(u('uRotation'), ${params.rotation});
+  gl.uniform1f(u('uStretchX'), ${params.stretchX});
+  gl.uniform1f(u('uStretchY'), ${params.stretchY});
+  gl.uniform1f(u('uBrightness'), ${params.brightness});
+  gl.uniform1f(u('uContrast'), ${params.contrast});
+  gl.uniform1f(u('uSaturation'), ${params.saturation});
+  gl.uniform1f(u('uGrain'), ${params.grain});
+  gl.uniform1f(u('uVignette'), ${params.vignette});
+  gl.uniform1f(u('uGlow'), ${params.glow});
+  gl.uniform3f(u('uBgColor'), bg[0], bg[1], bg[2]);
+  gl.uniform1f(u('uBgBlend'), ${params.bgBlend});
+  gl.uniform1f(u('uAspect'), canvas.width/canvas.height);
+  gl.uniform1i(u('uColorCount'), colors.length);
+  for(let i=0;i<8;i++){
+    if(i<colors.length){const c=hexRGB(colors[i]);gl.uniform3f(u('uColors['+i+']'),c[0],c[1],c[2]);}
+    else gl.uniform3f(u('uColors['+i+']'),0,0,0);
+  }
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+requestAnimationFrame(draw);
+<\/script>
+</body>
+</html>`;
+}
+
+// Init
+renderColors();
+renderPresets();
+</script>
+</body>
+</html>
